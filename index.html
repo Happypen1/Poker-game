@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<title>캠핑 포커 (놀이칩 5-Max)</title>
+<style>
+  body{background:#111;color:#fff;font-family:system-ui,apple color emoji,segoe ui,roboto}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  button{padding:10px 12px;background:#2b6bff;border:0;border-radius:10px;color:#fff}
+  input{padding:10px;border-radius:10px;border:1px solid #333;background:#222;color:#fff}
+  .seat{flex:1 0 46%;background:#1b1b1b;border-radius:12px;padding:10px;min-height:64px}
+  .dealer{outline:2px solid gold}
+  .card{display:inline-block;padding:6px 8px;background:#222;border-radius:8px;margin-right:6px}
+  .board{padding:8px;background:#181818;border-radius:12px}
+</style>
+</head>
+<body>
+<div style="padding:12px;max-width:640px;margin:0 auto">
+  <h2>캠핑 포커 (놀이칩 5-Max)</h2>
+
+  <div id="joinBox" class="row">
+    <input id="nick" placeholder="닉네임" style="flex:1"/>
+    <button id="btnJoin">입장</button>
+  </div>
+
+  <div class="row" style="margin-top:8px">
+    <button id="btnStart">핸드 시작</button>
+    <button id="btnFlop">Flop</button>
+    <button id="btnTurn">Turn</button>
+    <button id="btnRiver">River</button>
+    <button id="btnDealer">딜러 회전</button>
+  </div>
+
+  <h4>Board</h4>
+  <div id="board" class="board"></div>
+
+  <h4>좌석 (최대 5)</h4>
+  <div id="seats" class="row"></div>
+
+  <h4>내 카드</h4>
+  <div id="hole" class="row"></div>
+
+  <h4>칩 조정(본인만)</h4>
+  <div class="row">
+    <button class="adj" data-d="-100">-100</button>
+    <button class="adj" data-d="-50">-50</button>
+    <button class="adj" data-d="-10">-10</button>
+    <button class="adj" data-d="10">+10</button>
+    <button class="adj" data-d="50">+50</button>
+    <button class="adj" data-d="100">+100</button>
+  </div>
+
+  <h4>채팅</h4>
+  <div id="chatLog" style="height:150px;overflow:auto;border:1px solid #333;padding:6px;border-radius:8px;background:#0f0f0f"></div>
+  <div class="row" style="margin-top:6px">
+    <input id="chatMsg" placeholder="메시지" style="flex:1"/><button id="btnChat">보내기</button>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  const socket = io();
+  let myHole = [];
+
+  const $ = sel => document.querySelector(sel);
+  const seatsEl = $("#seats");
+  const boardEl = $("#board");
+  const holeEl = $("#hole");
+  const chatLog = $("#chatLog");
+
+  $("#btnJoin").onclick = () => {
+    const nick = $("#nick").value.trim();
+    if (!nick) return alert("닉네임!");
+    socket.emit("join", { nick }, (res) => {
+      if (res?.error) return alert(res.error);
+      $("#joinBox").style.display = "none";
+    });
+  };
+
+  $("#btnStart").onclick = () => socket.emit("startHand");
+  $("#btnFlop").onclick = () => socket.emit("dealFlop");
+  $("#btnTurn").onclick = () => socket.emit("dealTurn");
+  $("#btnRiver").onclick = () => socket.emit("dealRiver");
+  $("#btnDealer").onclick = () => socket.emit("rotateDealer");
+
+  document.querySelectorAll(".adj").forEach(btn=>{
+    btn.onclick = () => socket.emit("adjustStack", { delta: parseInt(btn.dataset.d) });
+  });
+
+  $("#btnChat").onclick = () => {
+    const m = $("#chatMsg").value.trim();
+    if (!m) return;
+    socket.emit("chat", m);
+    $("#chatMsg").value = "";
+  };
+
+  socket.on("state", (st) => {
+    // board
+    boardEl.innerHTML = "";
+    st.board.forEach(c=>{
+      const span = document.createElement("span"); span.className="card"; span.textContent=c; boardEl.appendChild(span);
+    });
+    // seats
+    seatsEl.innerHTML = "";
+    st.players
+      .sort((a,b)=>a.seat-b.seat)
+      .forEach(p=>{
+        const div = document.createElement("div");
+        div.className = "seat" + (p.isDealer ? " dealer" : "");
+        div.innerHTML = `<div><b>Seat ${p.seat}</b> ${p.isDealer?"(D)":""}</div>
+                         <div>${p.nick}</div>
+                         <div>${p.stack} chips</div>`;
+        seatsEl.appendChild(div);
+      });
+  });
+
+  socket.on("hole", (cards) => {
+    myHole = cards;
+    holeEl.innerHTML = "";
+    cards.forEach(c=>{
+      const span = document.createElement("span"); span.className="card"; span.textContent=c; holeEl.appendChild(span);
+    });
+  });
+
+  socket.on("chat", ({from, msg}) => {
+    const line = document.createElement("div");
+    line.textContent = `${from}: ${msg}`;
+    chatLog.appendChild(line);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  });
+</script>
+</body>
+</html>
